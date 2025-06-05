@@ -229,7 +229,7 @@ for offset in np.arange(start_offset, 1, -1):
     else:
         sma_vote = 'none'
     print("sma_vote: " + sma_vote)
-    votes.append(sma_vote)
+    # votes.append(sma_vote)
 
 
 
@@ -315,7 +315,7 @@ for offset in np.arange(start_offset, 1, -1):
         trade_ret = 0
         if vote == 'long':
             side = 'long'
-            posit = len(long_votes)/2
+            posit = 1
             
             if ((sl_flag != 'long') and (sl_flag != 'we_long')):
                 trade_ret = act_pct_del*posit- slippage
@@ -324,7 +324,7 @@ for offset in np.arange(start_offset, 1, -1):
             elif sl_flag == 'long':
                 trade_ret = -1*stop_loss_thresh*posit
         elif vote == 'short':
-            posit = len(short_votes)/2
+            posit = 1
             if ((sl_flag != 'short') and (sl_flag != 'we_short')):
                 trade_ret = -1*act_pct_del*posit - slippage
             elif sl_flag == 'we_short':
