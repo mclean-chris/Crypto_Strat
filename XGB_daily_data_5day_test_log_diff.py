@@ -24,7 +24,7 @@ output_stats_file = f"{output_folder}/XGB_5DAY_log_and_diff.csv"
 start_simulation_date = '2019-01-01' 
 filename = 'ETHUSD.csv'
 long_thresh = 0.00175    #0.0375 for 1 day
-short_thresh = -0.005  #-0.05 for 1 day
+short_thresh = -0.003  #-0.05 for 1 day
 
 slippage = 0.001
 XGB_data_len = 250
