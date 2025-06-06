@@ -20,17 +20,17 @@ import scipy.stats as stats
 
 data_folder = "crypto_data"
 output_folder = "Results20"
-output_stats_file = f"{output_folder}/XGB_EMA_5DAY_log_and_diff6.csv"
+output_stats_file = f"{output_folder}/XGB_EMA_5DAY_log_and_diff8.csv"
 start_simulation_date = '2019-01-01' 
 filename = 'ETHUSD.csv'
-long_thresh = 0.000019    #0.0375 for 1 day
-short_thresh = -0.00003  #-0.05 for 1 day
+long_thresh = 0.005    #0.0375 for 1 day
+short_thresh = -0.01  #-0.05 for 1 day
 
 slippage = 0.001
-XGB_data_len = 250
+XGB_data_len = 500
 pred_len = 5
 data_resolution = 1 # 24 for one tick every 24hrs, 1 for 1 per hour
-stop_loss_thresh = 0.05   #0.025 for 24hr, 0.05 for 5 day, 0.10 for 20 day
+stop_loss_thresh = 0.1   #0.025 for 24hr, 0.05 for 5 day, 0.10 for 20 day
 start_offset = 1080  #28613 #1303 1080 780 350
 sma_size = 10
 ema_len = 5
@@ -190,8 +190,15 @@ for offset in np.arange(start_offset, 1, -1):
     pred_pct_del = prediction[0][0]
     # XGB pred_pct_dels
 # 
-    
-    # pred_pct_del = prediction/act_enter
+
+    #this is the difference of the logs
+    # so to undo, add this difference to the last log, then exp() then this is the pred_close
+
+    pred_log_close = XGB_test_data['log_close_lag1'].iloc[0] + prediction[0][0]
+    pred_close = np.exp(pred_log_close)
+
+
+    pred_pct_del = (pred_close - act_enter)/act_enter
     # pred_pct_del = (prediction-act_enter)/act_enter #when using non-diff data
     act_pct_del = (act_exit -act_enter)/act_enter
     print("pred pct del: " + str(pred_pct_del))
@@ -240,7 +247,7 @@ for offset in np.arange(start_offset, 1, -1):
     else:
         sma_vote = 'none'
     print("sma_vote: " + sma_vote)
-    # votes.append(sma_vote)
+    votes.append(sma_vote)
 
     # if (XGB_train_data['momentum_lag1'].iloc[-1] > 0):
         
@@ -330,7 +337,7 @@ for offset in np.arange(start_offset, 1, -1):
         trade_ret = 0
         if vote == 'long':
             side = 'long'
-            posit = len(long_votes)/1
+            posit = len(long_votes)/2
             
             if ((sl_flag != 'long') and (sl_flag != 'we_long')):
                 trade_ret = act_pct_del*posit- slippage
@@ -339,7 +346,7 @@ for offset in np.arange(start_offset, 1, -1):
             elif sl_flag == 'long':
                 trade_ret = -1*stop_loss_thresh*posit
         elif vote == 'short':
-            posit = len(short_votes)/1
+            posit = len(short_votes)/2
             if ((sl_flag != 'short') and (sl_flag != 'we_short')):
                 trade_ret = -1*act_pct_del*posit - slippage
             elif sl_flag == 'we_short':
@@ -387,7 +394,7 @@ for offset in np.arange(start_offset, 1, -1):
     print(" Cum Return: " + '{0:.2f}'.format(cum_ret*100) + "%. \nThis side: " + side)
     print("offset: " + str(offset))
     print("XGB Model BA: " +'{0:.3f}'.format(XGB_BA))
-    # print("XGB_thresh_BA: " + '{0:.3f}'.format(XGB_thresh_BA))
+    print("XGB_thresh_BA: " + '{0:.3f}'.format(XGB_thresh_BA))
     print("trade BA: " + '{0:.3f}'.format(trade_BA))
     print("sma BA: " + '{0:.3f}'.format(sma_BA))
     print("posit: " + '{0:.3f}'.format(posit))
