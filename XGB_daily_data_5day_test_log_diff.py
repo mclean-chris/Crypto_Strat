@@ -30,7 +30,7 @@ slippage = 0.001
 XGB_data_len = 250
 pred_len = 5
 data_resolution = 1 # 24 for one tick every 24hrs, 1 for 1 per hour
-stop_loss_thresh = 0.1   #0.025 for 24hr, 0.05 for 5 day, 0.10 for 20 day
+stop_loss_thresh = 0.05   #0.025 for 24hr, 0.05 for 5 day, 0.10 for 20 day
 start_offset = 1080  #28613 #1303 1080 780 350
 sma_size = 10
 ema_len = 5
@@ -187,7 +187,7 @@ for offset in np.arange(start_offset, 1, -1):
     prediction = scaler.inverse_transform(prediction.reshape(-1,1))
 
     # prediction = np.exp(prediction[0][0])
-    pred_pct_del = prediction[0]
+    pred_pct_del = prediction[0][0]
     # XGB pred_pct_dels
 # 
     
