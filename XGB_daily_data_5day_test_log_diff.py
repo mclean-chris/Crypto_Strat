@@ -20,11 +20,11 @@ import scipy.stats as stats
 
 data_folder = "crypto_data"
 output_folder = "Results20"
-output_stats_file = f"{output_folder}/XGB_5DAY_log_and_diff.csv"
+output_stats_file = f"{output_folder}/XGB_EMA_5DAY_log_and_diff6.csv"
 start_simulation_date = '2019-01-01' 
 filename = 'ETHUSD.csv'
-long_thresh = 0.00175    #0.0375 for 1 day
-short_thresh = -0.003  #-0.05 for 1 day
+long_thresh = 0.000019    #0.0375 for 1 day
+short_thresh = -0.00003  #-0.05 for 1 day
 
 slippage = 0.001
 XGB_data_len = 250
@@ -39,13 +39,14 @@ param_grid = {
     'max_depth': [3, 5, 7], # 3 5 7 10
     'learning_rate': [0.01, 0.1, 0.3], #0.01 0.1 0.3
     'subsample': [0.5, 0.85],
-    'lambda': [1, 5],
+    # 'lambda': [1, 5],
     # 'alpha': [1, 5],
-    'colsample_bytree': [0.8, 0.2], #[0.8, 0.5, 0.2]
+    # 'colsample_bytree': [0.8, 0.2], #[0.8, 0.5, 0.2]
     # 'gamma': [0.1, 0.5, 0.8],
+    # "eval_metric": ["logloss"],
     'n_estimators': [100, 200, 300, 1000] #1000 max 100 200 300 1000
 }
-
+scaler = StandardScaler() 
 file_path = os.path.join(data_folder, filename)
 symbol = filename.split('.')[0]  
 
@@ -69,18 +70,18 @@ df['ema_lag1'] = df['close_lag1'].ewm(span=ema_len, adjust=False).mean()
 df['sma_lag1'] = df['close_lag1'].rolling(sma_size).mean()
 
 # Apply logarithmic transform to stabilize variance
-# df['log_close_lag1'] = np.log(df['close_lag1'])
-# df['log_close'] = np.log(df['close'])
+df['log_close_lag1'] = np.log(df['close_lag1'])
+df['log_close'] = np.log(df['close'])
 
 
-# df['diff_log_close'] = df['log_close'].diff()
-# df['diff_log_close_lag1'] = df['log_close_lag1'].diff()
+df['diff_log_close'] = df['log_close'].diff()
+df['diff_log_close_lag1'] = df['log_close_lag1'].diff()
 
 df['diff_close_lag1'] = df['close_lag1'].diff().dropna()
 df['diff_close'] = df['close'].diff().dropna()
+df['momentum_lag1'] = df['diff_close_lag1'].rolling(ema_len).mean().dropna()
 
-
-# df.dropna(subset=['diff_log_close', 'diff_log_close_lag1'], inplace=True)
+df.dropna(subset=['diff_log_close', 'diff_log_close_lag1'], inplace=True)
 
 cum_rets = []
 BAs = []
@@ -116,13 +117,19 @@ for offset in np.arange(start_offset, 1, -1):
 
 
 #XGB scaling
-    scaler = StandardScaler() #StandardScaler
+    #StandardScaler
 
-    X_train = scaler.fit_transform(XGB_train_data['diff_close_lag1'].values.reshape(-1,1))
-    y_train = scaler.transform(XGB_train_data['diff_close'].values.reshape(-1,1))
+    X_train = scaler.fit_transform(XGB_train_data['diff_log_close_lag1'].values.reshape(-1,1))
+    y_train = scaler.transform(XGB_train_data['diff_log_close'].values.reshape(-1,1))
 
-    X_test = scaler.transform(XGB_test_data['diff_close_lag1'].values.reshape(-1,1))
-    y_test = scaler.transform(XGB_test_data['diff_close'].values.reshape(-1,1))
+    X_test = scaler.transform(XGB_test_data['diff_log_close_lag1'].values.reshape(-1,1))
+    y_test = scaler.transform(XGB_test_data['diff_log_close'].values.reshape(-1,1))
+
+    # X_train = XGB_train_data['diff_log_close_lag1'].values.reshape(-1,1)
+    # y_train = XGB_train_data['diff_log_close'].values.reshape(-1,1)
+
+    # X_test = XGB_test_data['diff_log_close_lag1'].values.reshape(-1,1)
+    # y_test = XGB_test_data['diff_log_close'].values.reshape(-1,1)
 
     # hold_dates = pd.bdate_range(start=XGB_test_data['datetime'].iloc[0], end=XGB_test_data['datetime'].iloc[-1], holidays=mcal.holidays)
     cal_dates = pd.date_range(start=XGB_test_data['datetime'].iloc[0], end=XGB_test_data['datetime'].iloc[-1])
@@ -180,11 +187,11 @@ for offset in np.arange(start_offset, 1, -1):
     prediction = scaler.inverse_transform(prediction.reshape(-1,1))
 
     # prediction = np.exp(prediction[0][0])
-    prediction = prediction[0][0]
+    pred_pct_del = prediction[0]
     # XGB pred_pct_dels
 # 
     
-    pred_pct_del = prediction/act_enter
+    # pred_pct_del = prediction/act_enter
     # pred_pct_del = (prediction-act_enter)/act_enter #when using non-diff data
     act_pct_del = (act_exit -act_enter)/act_enter
     print("pred pct del: " + str(pred_pct_del))
@@ -219,21 +226,38 @@ for offset in np.arange(start_offset, 1, -1):
 
     
     if (XGB_train_data['ema_lag1'].iloc[-1] > XGB_train_data['sma_lag1'].iloc[-1]):
-        # pred_pct_del > (XGB_test_data.iloc[0]['ema1_lag1']/act_enter + long_thresh)):
+        
         sma_vote = 'long'
         sma_pred_BA_thresh_c = sma_pred_BA_thresh_c + 1
+        if act_pct_del > 0:
+            sma_BA_thresh_c = sma_BA_thresh_c + 1
     elif (XGB_train_data['ema_lag1'].iloc[-1] < XGB_train_data['sma_lag1'].iloc[-1]):
-        #   pred_pct_del < (XGB_test_data.iloc[0]['ema1_lag1']/act_enter + short_thresh)):
+        
         sma_vote = 'short'
         sma_pred_BA_thresh_c = sma_pred_BA_thresh_c + 1
+        if act_pct_del<0:
+            sma_BA_thresh_c = sma_BA_thresh_c+ 1
     else:
         sma_vote = 'none'
     print("sma_vote: " + sma_vote)
     # votes.append(sma_vote)
 
-
-
-
+    # if (XGB_train_data['momentum_lag1'].iloc[-1] > 0):
+        
+    #     sma_vote = 'long'
+    #     sma_pred_BA_thresh_c = sma_pred_BA_thresh_c + 1
+    #     if act_pct_del > 0:
+    #         sma_BA_thresh_c = sma_BA_thresh_c + 1
+    # elif (XGB_train_data['momentum_lag1'].iloc[-1] <0):
+        
+    #     sma_vote = 'short'
+    #     sma_pred_BA_thresh_c = sma_pred_BA_thresh_c + 1
+    #     if act_pct_del<0:
+    #         sma_BA_thresh_c = sma_BA_thresh_c+ 1
+    # else:
+    #     sma_vote = 'none'
+    # print("sma_vote: " + sma_vote)
+    # votes.append(sma_vote)
 
 
     long_votes = [vote for vote in votes if vote == 'long']
@@ -247,15 +271,6 @@ for offset in np.arange(start_offset, 1, -1):
         vote = 'long'
     elif len(short_votes) > len(long_votes):
         vote = 'short'
-    # elif (len(long_votes)> 0 and len(short_votes)> 0):
-    #     # lv = np.mean(long_votes)
-    #     # sv = np.mean(short_votes)
-    #     if lv > sv:
-    #         vote = 'long'
-    #     elif lv < sv:
-    #         vote = 'short'
-    #     else:
-    #         vote = 'tied'
     else:
         vote = 'tied'
 
@@ -315,7 +330,7 @@ for offset in np.arange(start_offset, 1, -1):
         trade_ret = 0
         if vote == 'long':
             side = 'long'
-            posit = 1
+            posit = len(long_votes)/1
             
             if ((sl_flag != 'long') and (sl_flag != 'we_long')):
                 trade_ret = act_pct_del*posit- slippage
@@ -324,7 +339,7 @@ for offset in np.arange(start_offset, 1, -1):
             elif sl_flag == 'long':
                 trade_ret = -1*stop_loss_thresh*posit
         elif vote == 'short':
-            posit = 1
+            posit = len(short_votes)/1
             if ((sl_flag != 'short') and (sl_flag != 'we_short')):
                 trade_ret = -1*act_pct_del*posit - slippage
             elif sl_flag == 'we_short':
@@ -365,7 +380,7 @@ for offset in np.arange(start_offset, 1, -1):
     
     XGB_BA = XGB_BA_c/pred_BA_c
     XGB_thresh_BA = XGB_thresh_BA_c/XGB_pred_BA_thresh_c
-    ema_BA = ema_BA_thresh_c/pred_BA_c
+    sma_BA = sma_BA_thresh_c/pred_BA_c
     # AR_BA = AR_BA_c/pred_BA_c
 
 
@@ -374,7 +389,7 @@ for offset in np.arange(start_offset, 1, -1):
     print("XGB Model BA: " +'{0:.3f}'.format(XGB_BA))
     # print("XGB_thresh_BA: " + '{0:.3f}'.format(XGB_thresh_BA))
     print("trade BA: " + '{0:.3f}'.format(trade_BA))
-    print("ema BA: " + '{0:.3f}'.format(ema_BA))
+    print("sma BA: " + '{0:.3f}'.format(sma_BA))
     print("posit: " + '{0:.3f}'.format(posit))
 
     prev_side = side
