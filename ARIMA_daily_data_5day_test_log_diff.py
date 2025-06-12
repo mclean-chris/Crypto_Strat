@@ -20,9 +20,9 @@ import scipy.stats as stats
 
 data_folder = "crypto_data"
 output_folder = "Results22"
-output_stats_file = f"{output_folder}/BTCARIMA_5DAY_l1s1sl05_bf75.csv"
+output_stats_file = f"{output_folder}/ETHUSDARIMA_5DAY_l1s1sl05_bf75.csv"
 start_simulation_date = '2019-01-01' 
-filename = 'BTCUSD.csv'
+filename = 'ETHUSD.csv'
 # long_thresh = 0.0025    #0.0375 for 1 day
 # short_thresh = -0.01  #-0.05 for 1 day
 AR_long_thresh = 0.01
@@ -163,7 +163,7 @@ for offset in np.arange(start_offset, 1, -1):
 
     if len(errors)>20:
         
-        bf = errors[-(50+pred_len):-pred_len]
+        bf = errors[-(20+pred_len):-pred_len]
         bf = bf[::-1] #used error period of 20 for ETHUSD
         bf = pd.Series(bf)
         bf = bf.ewm(span = len(bf)).mean().iloc[-1]
@@ -348,79 +348,49 @@ for offset in np.arange(start_offset, 1, -1):
     else:
         vote = 'tied'
 
-    X_we_stop_loss = []
-    sl_flag = 'none'
-    #which one happened first?
-    X_stop_loss = XGB_test_data.iloc[:]['low']
-    if len(mcs) > 0:
-        X_we_stop_loss = XGB_test_data[XGB_test_data['datetime'] == market_reopen_date]
-        if vote == 'long':
+    stop = 0
+    if vote == 'long' or vote == 'short':
+        for index, row in XGB_test_data.iterrows():
+        # for row in XGB_test_data:
+            if stop == 0:
+                if vote == 'long':
+                    if row['open'] < act_enter*(1-stop_loss_thresh):
+                        stop = (row['open'] - act_enter)/act_enter - slippage
+                    elif row['low'] < act_enter*(1-stop_loss_thresh):
+                        stop = -1*stop_loss_thresh - slippage
+                elif vote == 'short':
+                    if row['open'] > act_enter*(1+stop_loss_thresh):
+                        stop = (act_enter - row['open'])/act_enter - slippage
+                    elif row['low'] > act_enter*(1+stop_loss_thresh):
+                        stop = -1*stop_loss_thresh-slippage
+            else:
+                break
 
-            X_we_stop_loss = X_we_stop_loss[X_we_stop_loss['open'] < act_enter*(1-stop_loss_thresh)]
-            if len(X_we_stop_loss):
-                X_we_stop_loss.sort_values(by = 'datetime', ascending=True, inplace=True)
-                X_we_sl_date = X_we_stop_loss['datetime'].iloc[0]
-                X_we_sl_open = X_we_stop_loss['open'].iloc[0]
-        elif vote == 'short':
+    if stop != 0:
+        print("stop: " + '{0:.3f}'.format(stop))
 
-            X_we_stop_loss = X_we_stop_loss[X_we_stop_loss['open'] > act_enter*(1+stop_loss_thresh)]
-            if len(X_we_stop_loss):
-                X_we_stop_loss.sort_values(by = 'datetime', ascending=True, inplace=True)
-                X_we_sl_date = X_we_stop_loss['datetime'].iloc[0]
-                X_we_sl_open = X_we_stop_loss['open'].iloc[0]
-
-    if vote == 'long':
-        X_stop_loss = XGB_test_data[XGB_test_data['low'] < act_enter*(1-stop_loss_thresh)]
-        if len(X_stop_loss):
-            X_stop_loss.sort_values(by = ['datetime'], ascending =True, inplace = True)
-            X_stop_loss_date = X_stop_loss['datetime'].iloc[0]
-    elif vote == 'short':
-        X_stop_loss = XGB_test_data[XGB_test_data['high'] > act_enter*(1+stop_loss_thresh)]
-        if len(X_stop_loss):
-            X_stop_loss.sort_values(by = ['datetime'], ascending =True, inplace = True)
-            X_stop_loss_date = X_stop_loss['datetime'].iloc[0]
-
-    # # if both triggered, see which one happened first,
-    # # else if only one triggered then that is the flag
-    if (vote == 'long') or (vote == 'short'):
-        if (len(X_we_stop_loss) and \
-            (len(X_stop_loss))):
-            if X_we_sl_date<=X_stop_loss_date:
-                sl_flag = 'we_' + vote
-            elif X_stop_loss_date<X_we_sl_date:
-                sl_flag = vote
-        elif len(X_we_stop_loss):
-            sl_flag = 'we_' + vote
-        elif len(X_stop_loss):
-            sl_flag = vote
-
-    print("sl_flag: " + sl_flag)
     
     # weights = [XGB_BA]
     posit = 0
     #make trade
+    side = 'cash'
     if (vote == 'long') or (vote == 'short'):
         trade_c = trade_c + 1
         trade_ret = 0
         if vote == 'long':
             side = 'long'
-            posit = len(long_votes)
-            
-            if ((sl_flag != 'long') and (sl_flag != 'we_long')):
-                trade_ret = act_pct_del*posit- slippage
-            elif sl_flag == 'we_long':
-                trade_ret = (X_we_sl_open-act_enter)/act_enter
-            elif sl_flag == 'long':
-                trade_ret = -1*stop_loss_thresh*posit
-        elif vote == 'short':
+            posit = 1
+            if stop != 0:
+                trade_ret = stop*posit
+            elif stop == 0:
+                trade_ret = act_pct_del*posit
+        if vote == 'short':
             side = 'short'
-            posit = len(short_votes)
-            if ((sl_flag != 'short') and (sl_flag != 'we_short')):
-                trade_ret = -1*act_pct_del*posit - slippage
-            elif sl_flag == 'we_short':
-                trade_ret = (act_enter-X_we_sl_open)/act_enter
-            elif sl_flag == 'short':
-                trade_ret = -1*stop_loss_thresh*posit
+            posit = 1
+            if stop != 0:
+                trade_ret = stop*posit
+            elif stop == 0:
+                trade_ret = -1*act_pct_del*posit
         if side == prev_side:
             trade_ret = trade_ret + slippage
     else:
